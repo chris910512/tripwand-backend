@@ -1,0 +1,78 @@
+{
+  "basic_busan": {
+    "destination": "부산",
+    "duration": 3
+  },
+  "detailed_jeju": {
+    "destination": "제주도",
+    "duration": 4,
+    "age_group": "20대",
+    "group_size": 2,
+    "purpose": "힐링과 휴식",
+    "travel_type": "여유로운 여행"
+  },
+  "family_gyeongju": {
+    "destination": "경주",
+    "duration": 2,
+    "age_group": "30-40대",
+    "group_size": 4,
+    "purpose": "문화 체험과 교육",
+    "travel_type": "교육적인 여행"
+  },
+  "solo_gangneung": {
+    "destination": "강릉",
+    "duration": 5,
+    "age_group": "20대",
+    "group_size": 1,
+    "purpose": "자연 탐방과 사색",
+    "travel_type": "자유로운 배낭여행"
+  },
+  "business_seoul": {
+    "destination": "서울",
+    "duration": 3,
+    "age_group": "30-40대",
+    "group_size": 3,
+    "purpose": "비즈니스와 관광",
+    "travel_type": "효율적인 여행"
+  },
+  "romantic_couple": {
+    "destination": "전주",
+    "duration": 2,
+    "age_group": "20-30대",
+    "group_size": 2,
+    "purpose": "로맨틱한 데이트",
+    "travel_type": "여유로운 여행"
+  },
+  "adventure_group": {
+    "destination": "설악산",
+    "duration": 3,
+    "age_group": "20-30대",
+    "group_size": 6,
+    "purpose": "등산과 모험",
+    "travel_type": "액티브한 여행"
+  },
+  "culture_incheon": {
+    "destination": "인천",
+    "duration": 1,
+    "age_group": "40-50대",
+    "group_size": 2,
+    "purpose": "역사와 문화 탐방",
+    "travel_type": "교육적인 여행"
+  },
+  "food_tour_jeonju": {
+    "destination": "전주",
+    "duration": 2,
+    "age_group": "모든 연령",
+    "group_size": 4,
+    "purpose": "맛집 투어",
+    "travel_type": "미식 여행"
+  },
+  "weekend_getaway": {
+    "destination": "춘천",
+    "duration": 2,
+    "age_group": "20-30대",
+    "group_size": 3,
+    "purpose": "주말 여행",
+    "travel_type": "가벼운 여행"
+  }
+}

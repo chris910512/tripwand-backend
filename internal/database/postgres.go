@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"time"
+	"tripwand-backend/internal/models"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -88,23 +89,23 @@ func getEnv(key, defaultValue string) string {
 // Migrate 데이터베이스 마이그레이션 실행
 func Migrate() error {
 	// 사용자 테이블 마이그레이션
-	if err := DB.AutoMigrate(&User{}); err != nil {
+	if err := DB.AutoMigrate(&models.User{}); err != nil {
 		return fmt.Errorf("failed to migrate users table: %w", err)
 	}
 
-	// 채팅방 테이블 마이그레이션
-	if err := DB.AutoMigrate(&ChatRoom{}); err != nil {
-		return fmt.Errorf("failed to migrate chat_rooms table: %w", err)
+	// OAuth 계정 테이블 마이그레이션
+	if err := DB.AutoMigrate(&models.OAuthAccount{}); err != nil {
+		return fmt.Errorf("failed to migrate oauth_accounts table: %w", err)
 	}
 
-	// 메시지 테이블 마이그레이션
-	if err := DB.AutoMigrate(&Message{}); err != nil {
-		return fmt.Errorf("failed to migrate messages table: %w", err)
+	// 사용자 세션 테이블 마이그레이션
+	if err := DB.AutoMigrate(&models.UserSession{}); err != nil {
+		return fmt.Errorf("failed to migrate user_sessions table: %w", err)
 	}
 
-	// 벡터 임베딩 테이블 마이그레이션
-	if err := DB.AutoMigrate(&VectorEmbedding{}); err != nil {
-		return fmt.Errorf("failed to migrate vector_embeddings table: %w", err)
+	// 여행 계획 테이블 마이그레이션
+	if err := DB.AutoMigrate(&models.TravelPlans{}); err != nil {
+		return fmt.Errorf("failed to migrate travel_plans table: %w", err)
 	}
 
 	return nil
