@@ -104,7 +104,7 @@ jobs:
           --ingress=all \
           --execution-environment=gen2 \
           --cpu-throttling \
-          --startup-cpu-boost
+          --cpu-boost
     
     - name: Get service URL
       id: deploy
