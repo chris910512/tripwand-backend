@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.21-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
@@ -41,12 +41,7 @@ USER nonroot:nonroot
 # Expose port
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD ["/tripwand-backend", "--health-check"] || exit 1
-
 # Set environment
-ENV PORT=8080
 ENV TZ=Asia/Seoul
 
 # Run the binary

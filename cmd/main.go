@@ -27,13 +27,14 @@ func main() {
 	// 데이터베이스 연결
 	log.Println("🔌 Connecting to database...")
 	if err := database.Connect(); err != nil {
-		log.Fatal("Failed to connect to database:", err)
-	}
-
-	// 데이터베이스 마이그레이션
-	log.Println("🔄 Running database migrations...")
-	if err := runMigrations(); err != nil {
-		log.Fatal("Failed to run migrations:", err)
+		log.Printf("⚠️ Failed to connect to database: %v", err)
+		log.Println("⚠️ Starting without database connection - some features may not work")
+	} else {
+		// 데이터베이스 마이그레이션
+		log.Println("🔄 Running database migrations...")
+		if err := runMigrations(); err != nil {
+			log.Printf("⚠️ Failed to run migrations: %v", err)
+		}
 	}
 
 	// Gemma 클라이언트 초기화
@@ -41,9 +42,11 @@ func main() {
 	var err error
 	gemmaClient, err = llm.NewGemmaClient()
 	if err != nil {
-		log.Fatal("Failed to initialize Gemma client:", err)
+		log.Printf("⚠️ Failed to initialize Gemma client: %v", err)
+		log.Println("⚠️ Starting without AI client - some features may not work")
+	} else {
+		defer gemmaClient.Close()
 	}
-	defer gemmaClient.Close()
 
 	// Fiber 앱 초기화
 	app := fiber.New(fiber.Config{
