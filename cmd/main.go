@@ -67,9 +67,9 @@ func main() {
 	}))
 	app.Use(recover.New())
 
-	// CORS 설정 (Vercel 프론트엔드 지원)
+	// CORS 설정 (개발 및 프로덕션 프론트엔드 지원)
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
+		AllowOrigins:     getEnv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"),
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
 		AllowCredentials: true,
