@@ -36,7 +36,7 @@ type DayItinerary struct {
 type TravelResponse struct {
 	Itinerary     []DayItinerary `json:"itinerary"`
 	EstimatedCost int            `json:"estimated_cost" example:"500000"`
-	Cautions      []string       `json:"cautions" example:"["날씨 확인 필수", "예약 미리 하기"]"`
+	Cautions      []string       `json:"cautions" example:"날씨 확인 필수,예약 미리 하기"`
 }
 
 // TravelPlans 데이터베이스에 저장할 여행 계획 (선택사항)
