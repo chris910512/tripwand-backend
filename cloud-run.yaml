@@ -1,0 +1,114 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: tripwand-backend
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        # CPU allocation and concurrency
+        run.googleapis.com/cpu-throttling: "true"
+        run.googleapis.com/memory: "512Mi"
+        run.googleapis.com/cpu: "1000m"
+        
+        # Startup and request timeouts
+        run.googleapis.com/timeout: "300s"
+        run.googleapis.com/startup-cpu-boost: "true"
+        
+        # Scaling settings
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      # Maximum concurrent requests per instance
+      containerConcurrency: 100
+      
+      # How long to wait before timing out requests
+      timeoutSeconds: 300
+      
+      containers:
+      - image: gcr.io/PROJECT_ID/tripwand-backend:latest
+        ports:
+        - containerPort: 8080
+        
+        env:
+        # AlloyDB Omni configuration
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: tripwand-secrets
+              key: alloydb-host
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "tripwand_db"
+        - name: DB_SSL_MODE
+          value: "require"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: tripwand-secrets
+              key: alloydb-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tripwand-secrets
+              key: alloydb-password
+        
+        # Google AI API
+        - name: GOOGLE_AI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: tripwand-secrets
+              key: google-ai-api-key
+        
+        # JWT Secret
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: tripwand-secrets
+              key: jwt-secret
+        
+        # CORS configuration
+        - name: ALLOWED_ORIGINS
+          value: "https://tripwand.online,https://www.tripwand.online,https://api.tripwand.online,http://localhost:3000,http://localhost:5173"
+        
+        # Server configuration
+        - name: PORT
+          value: "8080"
+        - name: ENV
+          value: "production"
+        
+        # Resource limits
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        
+        # Liveness and readiness probes
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+  
+  traffic:
+  - percent: 100
+    latestRevision: true

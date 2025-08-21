@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+README.md
+docs/
+*.md
+
+# Test files
+test/
+*_test.go
+coverage.out
+
+# Development files
+.env.local
+.env.development
+.env.example
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node modules (if any)
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Build artifacts (keep only what we need)
+tripwand-backend
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Docker
+Dockerfile.dev
+docker-compose.dev.yml
