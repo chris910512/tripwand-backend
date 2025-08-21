@@ -99,7 +99,7 @@ jobs:
           --concurrency=100 \
           --timeout=300 \
           --port=8080 \
-          --set-env-vars="PORT=8080,ENV=production" \
+          --set-env-vars="ENV=production" \
           --set-secrets="DB_HOST=alloydb-host:latest,DB_USER=alloydb-user:latest,DB_PASSWORD=alloydb-password:latest,DB_NAME=alloydb-database:latest,DB_PORT=alloydb-port:latest,GOOGLE_AI_API_KEY=google-ai-api-key:latest,JWT_SECRET=jwt-secret:latest,ALLOWED_ORIGINS=allowed-origins:latest" \
           --ingress=all \
           --execution-environment=gen2 \
