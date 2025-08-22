@@ -9,7 +9,7 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   SERVICE_NAME: tripwand-backend
-  REGION: asia-northeast3  # Seoul region for better latency in Korea
+  REGION: us-east1
 
 jobs:
   # Test job - runs on all PRs and pushes
