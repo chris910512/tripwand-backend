@@ -11,6 +11,7 @@ import (
 type TravelRequest struct {
 	Destination string  `json:"destination" validate:"required" example:"부산"`
 	Duration    int     `json:"duration" validate:"required,min=1,max=30" example:"3"`
+	Language    *string `json:"language,omitempty" validate:"omitempty,oneof=ko en" example:"ko"`
 	AgeGroup    *string `json:"age_group,omitempty" example:"20대"`
 	GroupSize   *int    `json:"group_size,omitempty" validate:"omitempty,min=1,max=50" example:"2"`
 	Purpose     *string `json:"purpose,omitempty" example:"힐링과 휴식"`
@@ -72,9 +73,10 @@ type GemmaPromptData struct {
 	GroupSize   string
 	Purpose     string
 	TravelType  string
+	Language    string
 }
 
-// ToGemmaPrompt TravelRequest를 Gemma 프롬프트로 변환
+// ToGemmaPrompt TravelRequest를 Gemma 프롬프트로 변환 (다국어 지원)
 func (tr *TravelRequest) ToGemmaPrompt() string {
 	data := GemmaPromptData{
 		Destination: tr.Destination,
@@ -83,6 +85,7 @@ func (tr *TravelRequest) ToGemmaPrompt() string {
 		GroupSize:   getGroupSizeText(tr.GroupSize),
 		Purpose:     getStringValue(tr.Purpose, "일반적인 관광"),
 		TravelType:  getStringValue(tr.TravelType, "균형잡힌 여행"),
+		Language:    getStringValue(tr.Language, "ko"),
 	}
 
 	prompt := fmt.Sprintf(`%s을(를) %d일 동안 여행할 예정입니다. 
@@ -119,6 +122,13 @@ func (tr *TravelRequest) ToGemmaPrompt() string {
 
 각 일차별로 현실적이고 구체적인 일정을 만들어주세요. 예상 비용은 1인 기준 한국 원화로 계산해주세요.`,
 		data.Destination, data.Duration, data.AgeGroup, data.GroupSize, data.Purpose, data.TravelType)
+
+	// language가 "ko"가 아닌 경우 영어 응답 요청 추가
+	if data.Language != "ko" {
+		prompt += `
+
+Please provide all responses in English.`
+	}
 
 	return prompt
 }

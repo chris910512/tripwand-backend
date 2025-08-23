@@ -36,3 +36,4 @@ go.work.sum
 .claude/settings.local.json
 CLAUDE.md
 main
+tripwand-backend
