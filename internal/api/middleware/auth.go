@@ -1,14 +1,13 @@
 package middleware
 
 import (
-	"net/http"
 	"os"
 	"strings"
 	"time"
 	"tripwand-backend/internal/database"
 	"tripwand-backend/internal/models"
 
-	"github.com/gin-gonic/gin"
+	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -20,48 +19,48 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// AuthMiddleware - 인증 확인 (필수)
-func AuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		token := extractToken(c)
+// AuthMiddleware - 인증 확인 (필수) - Fiber 버전
+func AuthMiddleware() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		token := extractTokenFiber(c)
 		if token == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "No token provided"})
-			c.Abort()
-			return
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "No token provided",
+			})
 		}
 
 		claims, err := validateToken(token)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-			c.Abort()
-			return
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Invalid token",
+			})
 		}
 
 		// 사용자 정보를 context에 저장
-		c.Set("user_id", claims.UserID)
-		c.Set("email", claims.Email)
-		c.Next()
+		c.Locals("user_id", claims.UserID)
+		c.Locals("email", claims.Email)
+		return c.Next()
 	}
 }
 
-// OptionalAuthMiddleware - 인증 선택적 (비회원도 사용 가능)
-func OptionalAuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		token := extractToken(c)
+// OptionalAuthMiddleware - 인증 선택적 (비회원도 사용 가능) - Fiber 버전
+func OptionalAuthMiddleware() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		token := extractTokenFiber(c)
 		if token != "" {
 			claims, err := validateToken(token)
 			if err == nil {
-				c.Set("user_id", claims.UserID)
-				c.Set("email", claims.Email)
-				c.Set("is_authenticated", true)
+				c.Locals("user_id", claims.UserID)
+				c.Locals("email", claims.Email)
+				c.Locals("is_authenticated", true)
 			}
 		}
-		c.Next()
+		return c.Next()
 	}
 }
 
-func extractToken(c *gin.Context) string {
-	bearerToken := c.GetHeader("Authorization")
+func extractTokenFiber(c *fiber.Ctx) string {
+	bearerToken := c.Get("Authorization")
 	if len(strings.Split(bearerToken, " ")) == 2 {
 		return strings.Split(bearerToken, " ")[1]
 	}
