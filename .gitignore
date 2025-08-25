@@ -33,6 +33,7 @@ go.work.sum
 
 /docs
 /scripts
+/test/logs
 .claude/settings.local.json
 CLAUDE.md
 main
