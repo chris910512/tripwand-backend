@@ -114,22 +114,6 @@ func main() {
 	}
 }
 
-// runMigrations 데이터베이스 마이그레이션 실행
-func runMigrations() error {
-	// 기존 모델들
-	if err := database.DB.AutoMigrate(
-		//&models.User{},
-		//&models.ChatRoom{},
-		//&models.Message{},
-		//&models.VectorEmbedding{},
-		&models.TravelPlans{}, // 새로 추가된 여행 계획 모델
-	); err != nil {
-		return err
-	}
-
-	log.Println("✅ Database migrations completed")
-	return nil
-}
 
 // healthCheck 헬스체크 핸들러
 func healthCheck(c *fiber.Ctx) error {

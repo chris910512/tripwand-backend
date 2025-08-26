@@ -170,7 +170,10 @@ func (s *SessionService) generateNickname(sessionID string) string {
 func (s *SessionService) generateLocalStorageKey(sessionID string) string {
 	// 랜덤 바이트와 세션 ID 조합으로 키 생성
 	randomBytes := make([]byte, 16)
-	rand.Read(randomBytes)
+	if _, err := rand.Read(randomBytes); err != nil {
+		// 랜덤 바이트 생성 실패 시 시간 기반 대체
+		randomBytes = []byte(fmt.Sprintf("%d", time.Now().UnixNano()))
+	}
 	
 	combined := append([]byte(sessionID), randomBytes...)
 	hash := sha256.Sum256(combined)

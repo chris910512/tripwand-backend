@@ -83,9 +83,13 @@ func (c *Client) ReadPump() {
 	}()
 
 	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		log.Printf("Failed to set read deadline: %v", err)
+	}
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+			log.Printf("Failed to set read deadline in pong handler: %v", err)
+		}
 		c.LastPing = time.Now()
 		return nil
 	})
@@ -121,10 +125,15 @@ func (c *Client) WritePump() {
 	for {
 		select {
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				log.Printf("Failed to set write deadline: %v", err)
+				return
+			}
 			if !ok {
 				// Hub가 채널을 닫았음
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				if err := c.conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					log.Printf("Failed to write close message: %v", err)
+				}
 				return
 			}
 
@@ -132,13 +141,22 @@ func (c *Client) WritePump() {
 			if err != nil {
 				return
 			}
-			w.Write(message)
+			if _, err := w.Write(message); err != nil {
+				log.Printf("Failed to write message: %v", err)
+				return
+			}
 
 			// 큐에 있는 추가 메시지들도 함께 전송
 			n := len(c.send)
 			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.send)
+				if _, err := w.Write([]byte{'\n'}); err != nil {
+					log.Printf("Failed to write newline: %v", err)
+					return
+				}
+				if _, err := w.Write(<-c.send); err != nil {
+					log.Printf("Failed to write queued message: %v", err)
+					return
+				}
 			}
 
 			if err := w.Close(); err != nil {
@@ -146,7 +164,10 @@ func (c *Client) WritePump() {
 			}
 
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				log.Printf("Failed to set write deadline for ping: %v", err)
+				return
+			}
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
