@@ -52,7 +52,7 @@ func (h *ChatHandler) HandleWebSocket(c *websocket.Conn) {
 
 	// 읽기/쓰기 고루틴 시작
 	go client.WritePump()
-	go client.ReadPump()
+	client.ReadPump() // 동기적으로 실행 - 메인 고루틴에서 메시지 읽기 처리
 }
 
 // GetRooms 채팅방 목록 조회
@@ -138,14 +138,17 @@ func (h *ChatHandler) GetRoomMessages(c *fiber.Ctx) error {
 	}
 
 	// 데이터베이스에서 메시지 조회
+	log.Printf("[DEBUG-API] Getting messages for room %s, page %d, limit %d", room, page, limit)
 	messages, total, err := h.messageService.GetRoomMessagesByCountryCode(room, page, limit)
 	if err != nil {
-		log.Printf("Failed to get messages for room %s: %v", room, err)
+		log.Printf("[DEBUG-API] ERROR: Failed to get messages for room %s: %v", room, err)
 		return c.Status(404).JSON(fiber.Map{
 			"success": false,
 			"message": "Room not found or failed to fetch messages",
 		})
 	}
+	
+	log.Printf("[DEBUG-API] Found %d messages (total: %d)", len(messages), total)
 
 	// 응답 형식으로 변환
 	messageResponses := make([]map[string]interface{}, len(messages))
@@ -160,7 +163,10 @@ func (h *ChatHandler) GetRoomMessages(c *fiber.Ctx) error {
 			"created_at": msg.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			"is_blocked": msg.MessageType == "blocked",
 		}
+		log.Printf("[DEBUG-API] Message %d: ID=%d, Content=%s, Sender=%s", i, msg.ID, msg.Content, msg.Sender)
 	}
+	
+	log.Printf("[DEBUG-API] Returning %d messages in API response", len(messageResponses))
 
 	return c.JSON(fiber.Map{
 		"success": true,

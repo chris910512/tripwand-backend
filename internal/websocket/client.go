@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -98,6 +99,8 @@ func (c *Client) ReadPump() {
 			break
 		}
 
+		log.Printf("[DEBUG] Raw message received from client %s: %s", c.ID, string(messageBytes))
+
 		// 메시지 처리
 		if err := c.handleMessage(messageBytes); err != nil {
 			log.Printf("Error handling message from client %s: %v", c.ID, err)
@@ -178,6 +181,9 @@ func (c *Client) handleMessage(messageBytes []byte) error {
 
 // handleJoinRoom 방 입장 처리
 func (c *Client) handleJoinRoom(msg *Message) error {
+	log.Printf("[DEBUG] handleJoinRoom called for client %s", c.ID)
+	log.Printf("[DEBUG] Message data: %+v", msg)
+	
 	// 기존 방에서 나가기
 	if c.Room != "" {
 		c.leaveRoom()
@@ -185,6 +191,7 @@ func (c *Client) handleJoinRoom(msg *Message) error {
 
 	// 새 방 입장
 	c.Room = msg.Room
+	log.Printf("[DEBUG] Room set to: %s", c.Room)
 	
 	// 세션 ID 설정 (익명 사용자인 경우)
 	if sessionID, ok := msg.Data["session_id"].(string); ok {
@@ -212,40 +219,58 @@ func (c *Client) handleJoinRoom(msg *Message) error {
 
 // handleChatMessage 채팅 메시지 처리
 func (c *Client) handleChatMessage(msg *Message) error {
+	log.Printf("[DEBUG-CHAT] handleChatMessage called for client %s", c.ID)
+	log.Printf("[DEBUG-CHAT] Client info - Room: %s, UserID: %v, SessionID: %v, Nickname: %s", c.Room, c.UserID, c.SessionID, c.Nickname)
+	log.Printf("[DEBUG-CHAT] Message content: %s", msg.Content)
+	
 	if c.Room == "" {
+		log.Printf("[DEBUG-CHAT] ERROR: Client not in any room")
 		return c.sendError("You must join a room first")
 	}
 
 	// 메시지 검증
 	if msg.Content == "" {
+		log.Printf("[DEBUG-CHAT] ERROR: Empty message content")
 		return c.sendError("Message content cannot be empty")
 	}
 
 	if len(msg.Content) > 280 {
+		log.Printf("[DEBUG-CHAT] ERROR: Message too long (%d chars)", len(msg.Content))
 		return c.sendError("Message too long (max 280 characters)")
 	}
 
 	// 메시지 서비스 초기화
 	messageService := services.NewMessageService()
+	log.Printf("[DEBUG-CHAT] MessageService initialized")
 	
 	// 채팅방 정보 조회
+	log.Printf("[DEBUG-CHAT] Getting room info for country code: %s", c.Room)
 	room, err := messageService.GetRoomByCountryCode(c.Room)
 	if err != nil {
-		log.Printf("Failed to get room for country %s: %v", c.Room, err)
+		log.Printf("[DEBUG-CHAT] ERROR: Failed to get room for country %s: %v", c.Room, err)
 		return c.sendError("Invalid room")
 	}
+	log.Printf("[DEBUG-CHAT] Room found - ID: %d, Country: %s", room.ID, room.CountryCode)
 
 	// 데이터베이스에 메시지 저장
+	log.Printf("[DEBUG-CHAT] Attempting to save message to DB...")
+	log.Printf("[DEBUG-CHAT] Save params - RoomID: %d, Content: %s, UserID: %v, SessionID: %v, Nickname: %s", room.ID, msg.Content, c.UserID, c.SessionID, c.Nickname)
+	
 	savedMessage, err := messageService.SaveChatMessage(room.ID, msg.Content, c.UserID, c.SessionID, c.Nickname)
 	if err != nil {
-		log.Printf("Failed to save message: %v", err)
+		log.Printf("[DEBUG-CHAT] ERROR: Failed to save message: %v", err)
 		// 저장 실패해도 실시간 전송은 계속 진행
+	} else {
+		log.Printf("[DEBUG-CHAT] SUCCESS: Message saved to DB with ID: %d", savedMessage.ID)
 	}
 
 	// 메시지 ID 설정 (저장된 경우)
 	messageID := ""
 	if savedMessage != nil {
-		messageID = savedMessage.ID
+		messageID = fmt.Sprintf("%d", savedMessage.ID)  // uint를 string으로 변환
+		log.Printf("[DEBUG-CHAT] Using saved message ID: %s", messageID)
+	} else {
+		log.Printf("[DEBUG-CHAT] WARNING: No saved message ID (savedMessage is nil)")
 	}
 
 	// 브로드캐스트용 메시지 생성
@@ -261,10 +286,13 @@ func (c *Client) handleChatMessage(msg *Message) error {
 	// 방의 모든 클라이언트에게 브로드캐스트
 	messageBytes, err := broadcastMsg.ToJSON()
 	if err != nil {
+		log.Printf("[DEBUG-CHAT] ERROR: Failed to convert broadcast message to JSON: %v", err)
 		return err
 	}
 
+	log.Printf("[DEBUG-CHAT] Broadcasting message to room %s: %s", c.Room, string(messageBytes))
 	c.hub.BroadcastToRoom(c.Room, messageBytes)
+	log.Printf("[DEBUG-CHAT] Broadcast completed")
 	
 	// TODO: AI 검열 처리 (비동기)
 

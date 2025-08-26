@@ -5,7 +5,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"tripwand-backend/internal/database"
@@ -26,11 +25,15 @@ func NewMessageService() *MessageService {
 
 // SaveChatMessage 채팅 메시지 저장
 func (s *MessageService) SaveChatMessage(roomID uint, content string, userID *uint, sessionID *string, nickname string) (*models.ChatMessage, error) {
-	// 메시지 ID 생성
-	messageID := uuid.New().String()
-	
+	log.Printf("[DEBUG-SAVE] SaveChatMessage called with params:")
+	log.Printf("[DEBUG-SAVE] - RoomID: %d", roomID)
+	log.Printf("[DEBUG-SAVE] - Content: %s", content)
+	log.Printf("[DEBUG-SAVE] - UserID: %v", userID)
+	log.Printf("[DEBUG-SAVE] - SessionID: %v", sessionID)
+	log.Printf("[DEBUG-SAVE] - Nickname: %s", nickname)
+
 	chatMessage := &models.ChatMessage{
-		ID:          messageID,
+		// ID는 auto increment이므로 설정하지 않음
 		RoomID:      roomID,
 		UserID:      userID,
 		SessionID:   sessionID,
@@ -39,13 +42,20 @@ func (s *MessageService) SaveChatMessage(roomID uint, content string, userID *ui
 		MessageType: models.MessageTypeText,
 		CreatedAt:   time.Now(),
 	}
-	
+
+	log.Printf("[DEBUG-SAVE] Created ChatMessage struct: %+v", chatMessage)
+	log.Printf("[DEBUG-SAVE] Attempting DB Create operation...")
+
 	result := s.db.Create(chatMessage)
 	if result.Error != nil {
+		log.Printf("[DEBUG-SAVE] ERROR: DB Create failed: %v", result.Error)
 		return nil, fmt.Errorf("failed to save chat message: %w", result.Error)
 	}
-	
-	log.Printf("Saved message %s from %s in room %d", messageID, nickname, roomID)
+
+	log.Printf("[DEBUG-SAVE] SUCCESS: DB Create completed")
+	log.Printf("[DEBUG-SAVE] - RowsAffected: %d", result.RowsAffected)
+	log.Printf("[DEBUG-SAVE] - Final message ID: %d", chatMessage.ID)
+	log.Printf("Saved message %d from %s in room %d", chatMessage.ID, nickname, roomID)
 	return chatMessage, nil
 }
 
@@ -53,25 +63,25 @@ func (s *MessageService) SaveChatMessage(roomID uint, content string, userID *ui
 func (s *MessageService) GetRoomMessages(roomID uint, page, limit int) ([]*models.ChatMessage, int64, error) {
 	var messages []*models.ChatMessage
 	var total int64
-	
+
 	offset := (page - 1) * limit
-	
+
 	// 전체 개수 조회
 	if err := s.db.Model(&models.ChatMessage{}).Where("room_id = ? AND deleted_at IS NULL", roomID).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	
+
 	// 메시지 조회 (최신순)
 	result := s.db.Where("room_id = ? AND deleted_at IS NULL", roomID).
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(limit).
 		Find(&messages)
-		
+
 	if result.Error != nil {
 		return nil, 0, result.Error
 	}
-	
+
 	return messages, total, nil
 }
 
@@ -83,7 +93,7 @@ func (s *MessageService) GetRoomMessagesByCountryCode(countryCode string, page, 
 	if result.Error != nil {
 		return nil, 0, fmt.Errorf("room not found for country %s: %w", countryCode, result.Error)
 	}
-	
+
 	return s.GetRoomMessages(room.ID, page, limit)
 }
 
@@ -91,15 +101,15 @@ func (s *MessageService) GetRoomMessagesByCountryCode(countryCode string, page, 
 func (s *MessageService) DeleteExpiredMessages() error {
 	// 24시간 이전 메시지들을 소프트 삭제
 	expiredTime := time.Now().Add(-24 * time.Hour)
-	
+
 	result := s.db.Model(&models.ChatMessage{}).
 		Where("created_at < ? AND deleted_at IS NULL", expiredTime).
 		Update("deleted_at", time.Now())
-		
+
 	if result.Error != nil {
 		return result.Error
 	}
-	
+
 	log.Printf("Marked %d expired messages for deletion", result.RowsAffected)
 	return nil
 }
@@ -108,12 +118,12 @@ func (s *MessageService) DeleteExpiredMessages() error {
 func (s *MessageService) GetMessageStats() (*MessageStats, error) {
 	var stats MessageStats
 	now := time.Now()
-	
+
 	// 전체 메시지 수
 	if err := s.db.Model(&models.ChatMessage{}).Where("deleted_at IS NULL").Count(&stats.TotalMessages).Error; err != nil {
 		return nil, err
 	}
-	
+
 	// 오늘 메시지 수
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	if err := s.db.Model(&models.ChatMessage{}).
@@ -121,7 +131,7 @@ func (s *MessageService) GetMessageStats() (*MessageStats, error) {
 		Count(&stats.TodayMessages).Error; err != nil {
 		return nil, err
 	}
-	
+
 	// 최근 1시간 메시지 수
 	hourAgo := now.Add(-1 * time.Hour)
 	if err := s.db.Model(&models.ChatMessage{}).
@@ -129,7 +139,7 @@ func (s *MessageService) GetMessageStats() (*MessageStats, error) {
 		Count(&stats.LastHourMessages).Error; err != nil {
 		return nil, err
 	}
-	
+
 	// 방별 메시지 수
 	var roomStats []RoomMessageStat
 	if err := s.db.Model(&models.ChatMessage{}).
@@ -139,9 +149,9 @@ func (s *MessageService) GetMessageStats() (*MessageStats, error) {
 		Find(&roomStats).Error; err != nil {
 		return nil, err
 	}
-	
+
 	stats.MessagesByRoom = roomStats
-	
+
 	return &stats, nil
 }
 
@@ -150,29 +160,29 @@ func (s *MessageService) BlockMessage(messageID, reason string) error {
 	result := s.db.Model(&models.ChatMessage{}).
 		Where("id = ?", messageID).
 		Updates(map[string]interface{}{
-			"message_type":  models.MessageTypeBlocked,
+			"message_type":   models.MessageTypeBlocked,
 			"blocked_reason": reason,
-			"blocked_at":    time.Now(),
+			"blocked_at":     time.Now(),
 		})
-	
+
 	if result.Error != nil {
 		return result.Error
 	}
-	
+
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("message not found: %s", messageID)
 	}
-	
+
 	log.Printf("Blocked message %s: %s", messageID, reason)
 	return nil
 }
 
 // MessageStats 메시지 통계 구조체
 type MessageStats struct {
-	TotalMessages     int64             `json:"total_messages"`
-	TodayMessages     int64             `json:"today_messages"`
-	LastHourMessages  int64             `json:"last_hour_messages"`
-	MessagesByRoom    []RoomMessageStat `json:"messages_by_room"`
+	TotalMessages    int64             `json:"total_messages"`
+	TodayMessages    int64             `json:"today_messages"`
+	LastHourMessages int64             `json:"last_hour_messages"`
+	MessagesByRoom   []RoomMessageStat `json:"messages_by_room"`
 }
 
 // RoomMessageStat 방별 메시지 통계
@@ -184,13 +194,13 @@ type RoomMessageStat struct {
 // GetRoomByCountryCode 국가 코드로 채팅방 조회
 func (s *MessageService) GetRoomByCountryCode(countryCode string) (*models.ChatRoom, error) {
 	var room models.ChatRoom
-	result := s.db.Where("room_type = ? AND country_code = ? AND deleted_at IS NULL", 
+	result := s.db.Where("room_type = ? AND country_code = ? AND deleted_at IS NULL",
 		models.RoomTypePublic, countryCode).First(&room)
-	
+
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	
+
 	return &room, nil
 }
 
@@ -198,12 +208,12 @@ func (s *MessageService) GetRoomByCountryCode(countryCode string) (*models.ChatR
 func (s *MessageService) CleanupOldMessages() error {
 	// 7일 전에 소프트 삭제된 메시지들을 물리적으로 삭제
 	sevenDaysAgo := time.Now().Add(-7 * 24 * time.Hour)
-	
+
 	result := s.db.Unscoped().Where("deleted_at < ?", sevenDaysAgo).Delete(&models.ChatMessage{})
 	if result.Error != nil {
 		return result.Error
 	}
-	
+
 	log.Printf("Permanently deleted %d old messages", result.RowsAffected)
 	return nil
 }

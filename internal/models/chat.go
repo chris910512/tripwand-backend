@@ -25,7 +25,7 @@ type ChatRoom struct {
 
 // ChatMessage 채팅 메시지 모델 (파티셔닝 테이블)
 type ChatMessage struct {
-	ID           string         `json:"id" gorm:"type:varchar(36);primaryKey"`
+	ID           uint           `json:"id" gorm:"primaryKey;autoIncrement"`  // bigint 타입으로 변경
 	RoomID       uint           `json:"room_id" gorm:"not null;index"`
 	UserID       *uint          `json:"user_id" gorm:"index"`
 	SessionID    *string        `json:"session_id" gorm:"type:varchar(36);index"`
