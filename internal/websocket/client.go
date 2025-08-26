@@ -250,7 +250,11 @@ func (c *Client) handleChatMessage(msg *Message) error {
 		log.Printf("[DEBUG-CHAT] ERROR: Failed to get room for country %s: %v", c.Room, err)
 		return c.sendError("Invalid room")
 	}
-	log.Printf("[DEBUG-CHAT] Room found - ID: %d, Country: %s", room.ID, room.CountryCode)
+	countryCode := ""
+	if room.CountryCode != nil {
+		countryCode = *room.CountryCode
+	}
+	log.Printf("[DEBUG-CHAT] Room found - ID: %d, Country: %s", room.ID, countryCode)
 
 	// 데이터베이스에 메시지 저장
 	log.Printf("[DEBUG-CHAT] Attempting to save message to DB...")
