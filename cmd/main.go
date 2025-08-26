@@ -13,7 +13,6 @@ import (
 	"tripwand-backend/internal/api/routes"
 	"tripwand-backend/internal/database"
 	"tripwand-backend/internal/llm"
-	"tripwand-backend/internal/models"
 	ws "tripwand-backend/internal/websocket"
 )
 
