@@ -31,6 +31,7 @@ func SetupChatRoutes(app *fiber.App) {
 	// 세션 관련 (익명 사용자)
 	api.Post("/sessions", chatHandler.CreateSession)                  // 세션 생성/복구
 	api.Get("/sessions/:sessionId", chatHandler.GetSession)           // 세션 정보 조회
+	api.Put("/sessions/:sessionId/refresh", chatHandler.RefreshSession) // 세션 갱신
 
 	// 통계 및 관리
 	api.Get("/stats", chatHandler.GetStats)                          // WebSocket 통계

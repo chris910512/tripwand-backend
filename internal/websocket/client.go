@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/gofiber/websocket/v2"
+
+	"tripwand-backend/internal/services"
 )
 
 // Client WebSocket 클라이언트 연결을 나타냄
@@ -223,27 +225,48 @@ func (c *Client) handleChatMessage(msg *Message) error {
 		return c.sendError("Message too long (max 280 characters)")
 	}
 
-	// 메시지 생성
-	chatMsg := &Message{
-		Type:      MessageTypeNewMessage,
-		Room:      c.Room,
-		Content:   msg.Content,
-		UserID:    c.UserID,
-		SessionID: c.SessionID,
-		Nickname:  c.Nickname,
-		Timestamp: time.Now(),
+	// 메시지 서비스 초기화
+	messageService := services.NewMessageService()
+	
+	// 채팅방 정보 조회
+	room, err := messageService.GetRoomByCountryCode(c.Room)
+	if err != nil {
+		log.Printf("Failed to get room for country %s: %v", c.Room, err)
+		return c.sendError("Invalid room")
 	}
 
+	// 데이터베이스에 메시지 저장
+	savedMessage, err := messageService.SaveChatMessage(room.ID, msg.Content, c.UserID, c.SessionID, c.Nickname)
+	if err != nil {
+		log.Printf("Failed to save message: %v", err)
+		// 저장 실패해도 실시간 전송은 계속 진행
+	}
+
+	// 메시지 ID 설정 (저장된 경우)
+	messageID := ""
+	if savedMessage != nil {
+		messageID = savedMessage.ID
+	}
+
+	// 브로드캐스트용 메시지 생성
+	broadcastMsg := NewNewMessageBroadcast(
+		c.Room,
+		msg.Content,
+		c.Nickname,
+		messageID,
+		c.UserID,
+		c.SessionID,
+	)
+
 	// 방의 모든 클라이언트에게 브로드캐스트
-	messageBytes, err := chatMsg.ToJSON()
+	messageBytes, err := broadcastMsg.ToJSON()
 	if err != nil {
 		return err
 	}
 
 	c.hub.BroadcastToRoom(c.Room, messageBytes)
 	
-	// TODO: 데이터베이스에 메시지 저장
-	// TODO: AI 검열 처리
+	// TODO: AI 검열 처리 (비동기)
 
 	log.Printf("Chat message from %s in room %s: %s", c.ID, c.Room, msg.Content)
 

@@ -9,15 +9,22 @@ import (
 	"github.com/gofiber/websocket/v2"
 	"github.com/google/uuid"
 
+	"tripwand-backend/internal/services"
 	ws "tripwand-backend/internal/websocket"
 )
 
 // ChatHandler 채팅 관련 핸들러
-type ChatHandler struct{}
+type ChatHandler struct {
+	sessionService *services.SessionService
+	messageService *services.MessageService
+}
 
 // NewChatHandler 새로운 채팅 핸들러 생성
 func NewChatHandler() *ChatHandler {
-	return &ChatHandler{}
+	return &ChatHandler{
+		sessionService: services.NewSessionService(),
+		messageService: services.NewMessageService(),
+	}
 }
 
 // WebSocketUpgrade WebSocket 업그레이드 핸들러
@@ -130,17 +137,38 @@ func (h *ChatHandler) GetRoomMessages(c *fiber.Ctx) error {
 		limit = 50
 	}
 
-	// TODO: 실제 데이터베이스에서 메시지 조회
-	// 현재는 빈 응답 반환
-	messages := []interface{}{}
+	// 데이터베이스에서 메시지 조회
+	messages, total, err := h.messageService.GetRoomMessagesByCountryCode(room, page, limit)
+	if err != nil {
+		log.Printf("Failed to get messages for room %s: %v", room, err)
+		return c.Status(404).JSON(fiber.Map{
+			"success": false,
+			"message": "Room not found or failed to fetch messages",
+		})
+	}
+
+	// 응답 형식으로 변환
+	messageResponses := make([]map[string]interface{}, len(messages))
+	for i, msg := range messages {
+		messageResponses[i] = map[string]interface{}{
+			"id":         msg.ID,
+			"content":    msg.Content,
+			"sender":     msg.Sender,
+			"user_id":    msg.UserID,
+			"session_id": msg.SessionID,
+			"message_type": msg.MessageType,
+			"created_at": msg.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			"is_blocked": msg.MessageType == "blocked",
+		}
+	}
 
 	return c.JSON(fiber.Map{
 		"success": true,
 		"room":    room,
 		"page":    page,
 		"limit":   limit,
-		"total":   0,
-		"messages": messages,
+		"total":   total,
+		"messages": messageResponses,
 	})
 }
 
@@ -148,9 +176,25 @@ func (h *ChatHandler) GetRoomMessages(c *fiber.Ctx) error {
 func (h *ChatHandler) GetStats(c *fiber.Ctx) error {
 	stats := ws.GlobalHub.GetStats()
 	
+	// 세션 통계도 포함
+	sessionStats, err := h.sessionService.GetSessionStats()
+	if err != nil {
+		log.Printf("Failed to get session stats: %v", err)
+		sessionStats = &services.SessionStats{}
+	}
+	
+	// 메시지 통계도 포함
+	messageStats, err := h.messageService.GetMessageStats()
+	if err != nil {
+		log.Printf("Failed to get message stats: %v", err)
+		messageStats = &services.MessageStats{}
+	}
+	
 	return c.JSON(fiber.Map{
-		"success": true,
-		"stats":   stats,
+		"success":       true,
+		"websocket":     stats,
+		"sessions":      sessionStats,
+		"messages":      messageStats,
 	})
 }
 
@@ -169,16 +213,24 @@ func (h *ChatHandler) CreateSession(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: 실제 세션 생성/복구 로직 구현
-	// 현재는 임시 세션 ID 반환
-	sessionID := uuid.New().String()
-	nickname := "익명_" + sessionID[:8]
+	// 세션 생성/복구 시도
+	session, err := h.sessionService.CreateOrRecoverSession(req.BrowserFingerprint, req.LocalStorageKey)
+	if err != nil {
+		log.Printf("Failed to create/recover session: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to create session",
+		})
+	}
 
 	return c.JSON(fiber.Map{
-		"success":    true,
-		"session_id": sessionID,
-		"nickname":   nickname,
-		"expires_at": "2024-09-01T00:00:00Z", // 7일 후
+		"success":           true,
+		"session_id":        session.SessionID,
+		"nickname":          session.Nickname,
+		"localstorage_key":  session.LocalStorageKey,
+		"expires_at":        session.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
+		"created_at":        session.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"is_recovered":      req.LocalStorageKey != "" && session.LocalStorageKey == req.LocalStorageKey,
 	})
 }
 
@@ -192,16 +244,50 @@ func (h *ChatHandler) GetSession(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: 실제 세션 정보 조회
-	// 현재는 임시 응답
-	nickname := "익명_" + sessionID[:8]
+	// 세션 정보 조회
+	session, err := h.sessionService.GetSession(sessionID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"success": false,
+			"message": "Session not found or expired",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"success":          true,
+		"session_id":       session.SessionID,
+		"nickname":         session.Nickname,
+		"localstorage_key": session.LocalStorageKey,
+		"expires_at":       session.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
+		"created_at":       session.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"is_active":        time.Now().Before(session.ExpiresAt),
+	})
+}
+
+// RefreshSession 세션 갱신 (만료시간 연장)
+func (h *ChatHandler) RefreshSession(c *fiber.Ctx) error {
+	sessionID := c.Params("sessionId")
+	if sessionID == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"success": false,
+			"message": "Session ID is required",
+		})
+	}
+
+	// 세션 갱신
+	session, err := h.sessionService.RefreshSession(sessionID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"success": false,
+			"message": "Session not found",
+		})
+	}
 
 	return c.JSON(fiber.Map{
 		"success":    true,
-		"session_id": sessionID,
-		"nickname":   nickname,
-		"expires_at": "2024-09-01T00:00:00Z",
-		"is_active":  true,
+		"session_id": session.SessionID,
+		"expires_at": session.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
+		"message":    "Session refreshed successfully",
 	})
 }
 

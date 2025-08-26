@@ -25,11 +25,12 @@ type ChatRoom struct {
 
 // ChatMessage 채팅 메시지 모델 (파티셔닝 테이블)
 type ChatMessage struct {
-	ID           uint           `json:"id" gorm:"primaryKey"`
+	ID           string         `json:"id" gorm:"type:varchar(36);primaryKey"`
 	RoomID       uint           `json:"room_id" gorm:"not null;index"`
 	UserID       *uint          `json:"user_id" gorm:"index"`
 	SessionID    *string        `json:"session_id" gorm:"type:varchar(36);index"`
 	Content      string         `json:"content" gorm:"type:text;not null"`
+	Sender       string         `json:"sender" gorm:"type:varchar(50);not null"`
 	MessageType  string         `json:"message_type" gorm:"type:varchar(20);not null;default:'text';check:message_type IN ('text','blocked','system')"`
 	ModeratedAt  *time.Time     `json:"moderated_at"`
 	IsHarmful    *bool          `json:"is_harmful"`
