@@ -14,6 +14,7 @@ import (
 	"tripwand-backend/internal/database"
 	"tripwand-backend/internal/llm"
 	"tripwand-backend/internal/models"
+	ws "tripwand-backend/internal/websocket"
 )
 
 var gemmaClient *llm.GemmaClient
@@ -32,10 +33,14 @@ func main() {
 	} else {
 		// 데이터베이스 마이그레이션
 		log.Println("🔄 Running database migrations...")
-		if err := runMigrations(); err != nil {
+		if err := database.Migrate(); err != nil {
 			log.Printf("⚠️ Failed to run migrations: %v", err)
 		}
 	}
+
+	// WebSocket Hub 초기화
+	log.Println("🌐 Initializing WebSocket Hub...")
+	ws.InitializeHub()
 
 	// Gemma 클라이언트 초기화
 	log.Println("🤖 Initializing Gemma client...")
@@ -87,6 +92,9 @@ func main() {
 	// 여행 관련 라우트 설정
 	routes.SetupTravelRoutes(api, gemmaClient)
 
+	// 채팅 관련 라우트 설정
+	routes.SetupChatRoutes(app)
+
 	// 기존 LLM 라우트 (테스트용으로 유지)
 	setupLLMRoutes(api)
 
@@ -97,6 +105,9 @@ func main() {
 	log.Printf("   Health Check: http://localhost:%s/health", port)
 	log.Printf("   Travel API: http://localhost:%s/api/v1/travel/generate", port)
 	log.Printf("   Plans API: http://localhost:%s/api/v1/travel/plans", port)
+	log.Printf("   Chat WebSocket: ws://localhost:%s/ws/chat", port)
+	log.Printf("   Chat Rooms: http://localhost:%s/api/v1/chat/rooms", port)
+	log.Printf("   Chat Stats: http://localhost:%s/api/v1/chat/stats", port)
 
 	if err := app.Listen(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
@@ -135,14 +146,27 @@ func healthCheck(c *fiber.Ctx) error {
 		gemmaStatus = "unhealthy"
 	}
 
+	// WebSocket Hub 상태 확인
+	webSocketStatus := "healthy"
+	stats := ws.GlobalHub.GetStats()
+	if ws.GlobalHub == nil {
+		webSocketStatus = "unhealthy"
+	}
+
 	return c.JSON(fiber.Map{
-		"status":   "healthy",
-		"service":  "tripwand-backend",
-		"version":  "1.0.0",
-		"database": dbStatus,
-		"gemma":    gemmaStatus,
+		"status":    "healthy",
+		"service":   "tripwand-backend",
+		"version":   "1.0.0",
+		"database":  dbStatus,
+		"gemma":     gemmaStatus,
+		"websocket": webSocketStatus,
+		"chat_stats": fiber.Map{
+			"total_clients": stats.TotalClients,
+			"active_rooms":  len(stats.RoomClients),
+		},
 		"features": []string{
 			"여행 일정 AI 생성",
+			"실시간 채팅 (7개국)",
 			"Google AI Studio Gemma 3",
 			"PostgreSQL + pgvector",
 			"여행 계획 저장/조회",
@@ -151,6 +175,9 @@ func healthCheck(c *fiber.Ctx) error {
 			"POST /api/v1/travel/generate - 여행 일정 생성",
 			"GET /api/v1/travel/plans - 저장된 계획 목록",
 			"GET /api/v1/travel/plans/{id} - 계획 상세 조회",
+			"WebSocket /ws/chat - 실시간 채팅",
+			"GET /api/v1/chat/rooms - 채팅방 목록",
+			"GET /api/v1/chat/stats - 채팅 통계",
 		},
 	})
 }

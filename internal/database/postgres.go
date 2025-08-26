@@ -237,21 +237,25 @@ func createChatIndexes() error {
 		}
 	}
 
-	// 추가 제약조건 생성
-	constraints := []string{
-		// ChatRoom 제약조건: 공개방은 country_code 필수, 개인방은 participants 필수
-		"ALTER TABLE chat_rooms ADD CONSTRAINT IF NOT EXISTS check_public_room_country CHECK ((room_type = 'public' AND country_code IS NOT NULL) OR room_type = 'private');",
-		"ALTER TABLE chat_rooms ADD CONSTRAINT IF NOT EXISTS check_private_room_participants CHECK ((room_type = 'private' AND participant1 IS NOT NULL AND participant2 IS NOT NULL) OR room_type = 'public');",
-		"ALTER TABLE chat_rooms ADD CONSTRAINT IF NOT EXISTS check_participants_different CHECK (participant1 != participant2);",
-
-		// AnonymousSession 제약조건
-		"ALTER TABLE anonymous_sessions ADD CONSTRAINT IF NOT EXISTS check_expires_after_created CHECK (expires_at > created_at);",
-		"ALTER TABLE anonymous_sessions ADD CONSTRAINT IF NOT EXISTS check_nickname_format CHECK (nickname ~ '^익명_[a-zA-Z0-9]{8}$');",
+	// 추가 제약조건 생성 (PostgreSQL은 IF NOT EXISTS를 지원하지 않으므로 개별 확인)
+	constraints := map[string]string{
+		"check_public_room_country": "ALTER TABLE chat_rooms ADD CONSTRAINT check_public_room_country CHECK ((room_type = 'public' AND country_code IS NOT NULL) OR room_type = 'private');",
+		"check_private_room_participants": "ALTER TABLE chat_rooms ADD CONSTRAINT check_private_room_participants CHECK ((room_type = 'private' AND participant1 IS NOT NULL AND participant2 IS NOT NULL) OR room_type = 'public');",
+		"check_participants_different": "ALTER TABLE chat_rooms ADD CONSTRAINT check_participants_different CHECK (participant1 != participant2);",
+		"check_expires_after_created": "ALTER TABLE anonymous_sessions ADD CONSTRAINT check_expires_after_created CHECK (expires_at > created_at);",
+		"check_nickname_format": "ALTER TABLE anonymous_sessions ADD CONSTRAINT check_nickname_format CHECK (nickname ~ '^익명_[a-zA-Z0-9]{8}$');",
 	}
 
-	for _, constraintSQL := range constraints {
-		// 제약조건은 이미 존재할 수 있으므로 에러 무시
-		DB.Exec(constraintSQL)
+	for constraintName, constraintSQL := range constraints {
+		// 제약조건 존재 여부 확인
+		var count int64
+		checkSQL := "SELECT COUNT(*) FROM information_schema.table_constraints WHERE constraint_name = ? AND table_schema = current_schema();"
+		DB.Raw(checkSQL, constraintName).Scan(&count)
+		
+		if count == 0 {
+			// 제약조건이 없으면 추가 (에러 무시)
+			DB.Exec(constraintSQL)
+		}
 	}
 
 	log.Println("Chat indexes and constraints created successfully")

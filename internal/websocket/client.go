@@ -1,0 +1,316 @@
+package websocket
+
+import (
+	"encoding/json"
+	"log"
+	"time"
+
+	"github.com/gofiber/websocket/v2"
+)
+
+// Client WebSocket 클라이언트 연결을 나타냄
+type Client struct {
+	// 고유 ID
+	ID string
+
+	// WebSocket 연결
+	conn *websocket.Conn
+
+	// 허브 참조
+	hub *Hub
+
+	// 메시지 전송 채널
+	send chan []byte
+
+	// 클라이언트가 속한 채팅방
+	Room string
+
+	// 사용자 ID (로그인한 경우)
+	UserID *uint
+
+	// 세션 ID (익명 사용자인 경우)
+	SessionID *string
+
+	// 닉네임
+	Nickname string
+
+	// 연결 시간
+	ConnectedAt time.Time
+
+	// 마지막 ping 시간
+	LastPing time.Time
+
+	// 클라이언트가 활성 상태인지
+	IsActive bool
+}
+
+const (
+	// Time allowed to write a message to the peer
+	writeWait = 10 * time.Second
+
+	// Time allowed to read the next pong message from the peer
+	pongWait = 60 * time.Second
+
+	// Send pings to peer with this period. Must be less than pongWait
+	pingPeriod = (pongWait * 9) / 10
+
+	// Maximum message size allowed from peer
+	maxMessageSize = 512
+)
+
+// NewClient 새로운 클라이언트 생성
+func NewClient(conn *websocket.Conn, hub *Hub, clientID string) *Client {
+	now := time.Now()
+	return &Client{
+		ID:          clientID,
+		conn:        conn,
+		hub:         hub,
+		send:        make(chan []byte, 256),
+		ConnectedAt: now,
+		LastPing:    now,
+		IsActive:    true,
+	}
+}
+
+// ReadPump 클라이언트로부터 메시지를 읽는 고루틴
+func (c *Client) ReadPump() {
+	defer func() {
+		c.hub.UnregisterClient(c)
+		c.conn.Close()
+	}()
+
+	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		c.LastPing = time.Now()
+		return nil
+	})
+
+	for {
+		_, messageBytes, err := c.conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("WebSocket error: %v", err)
+			}
+			break
+		}
+
+		// 메시지 처리
+		if err := c.handleMessage(messageBytes); err != nil {
+			log.Printf("Error handling message from client %s: %v", c.ID, err)
+		}
+
+		c.LastPing = time.Now()
+	}
+}
+
+// WritePump 클라이언트에게 메시지를 쓰는 고루틴
+func (c *Client) WritePump() {
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		ticker.Stop()
+		c.conn.Close()
+	}()
+
+	for {
+		select {
+		case message, ok := <-c.send:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if !ok {
+				// Hub가 채널을 닫았음
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			w, err := c.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				return
+			}
+			w.Write(message)
+
+			// 큐에 있는 추가 메시지들도 함께 전송
+			n := len(c.send)
+			for i := 0; i < n; i++ {
+				w.Write([]byte{'\n'})
+				w.Write(<-c.send)
+			}
+
+			if err := w.Close(); err != nil {
+				return
+			}
+
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		}
+	}
+}
+
+// handleMessage 클라이언트로부터 받은 메시지 처리
+func (c *Client) handleMessage(messageBytes []byte) error {
+	var msg Message
+	if err := json.Unmarshal(messageBytes, &msg); err != nil {
+		return err
+	}
+
+	// 메시지 타입별 처리
+	switch msg.Type {
+	case MessageTypeJoinRoom:
+		return c.handleJoinRoom(&msg)
+	
+	case MessageTypeChatMessage:
+		return c.handleChatMessage(&msg)
+	
+	case MessageTypePong:
+		return c.handlePong(&msg)
+	
+	default:
+		log.Printf("Unknown message type: %s from client %s", msg.Type, c.ID)
+	}
+
+	return nil
+}
+
+// handleJoinRoom 방 입장 처리
+func (c *Client) handleJoinRoom(msg *Message) error {
+	// 기존 방에서 나가기
+	if c.Room != "" {
+		c.leaveRoom()
+	}
+
+	// 새 방 입장
+	c.Room = msg.Room
+	
+	// 세션 ID 설정 (익명 사용자인 경우)
+	if sessionID, ok := msg.Data["session_id"].(string); ok {
+		c.SessionID = &sessionID
+	}
+
+	// 사용자 ID 설정 (로그인 사용자인 경우) 
+	if userID, ok := msg.Data["user_id"].(float64); ok {
+		uid := uint(userID)
+		c.UserID = &uid
+	}
+
+	// 닉네임 설정
+	if nickname, ok := msg.Data["nickname"].(string); ok {
+		c.Nickname = nickname
+	}
+
+	log.Printf("Client %s joining room %s", c.ID, c.Room)
+	
+	// 허브에 다시 등록 (방 정보 업데이트)
+	c.hub.RegisterClient(c)
+
+	return nil
+}
+
+// handleChatMessage 채팅 메시지 처리
+func (c *Client) handleChatMessage(msg *Message) error {
+	if c.Room == "" {
+		return c.sendError("You must join a room first")
+	}
+
+	// 메시지 검증
+	if msg.Content == "" {
+		return c.sendError("Message content cannot be empty")
+	}
+
+	if len(msg.Content) > 280 {
+		return c.sendError("Message too long (max 280 characters)")
+	}
+
+	// 메시지 생성
+	chatMsg := &Message{
+		Type:      MessageTypeNewMessage,
+		Room:      c.Room,
+		Content:   msg.Content,
+		UserID:    c.UserID,
+		SessionID: c.SessionID,
+		Nickname:  c.Nickname,
+		Timestamp: time.Now(),
+	}
+
+	// 방의 모든 클라이언트에게 브로드캐스트
+	messageBytes, err := chatMsg.ToJSON()
+	if err != nil {
+		return err
+	}
+
+	c.hub.BroadcastToRoom(c.Room, messageBytes)
+	
+	// TODO: 데이터베이스에 메시지 저장
+	// TODO: AI 검열 처리
+
+	log.Printf("Chat message from %s in room %s: %s", c.ID, c.Room, msg.Content)
+
+	return nil
+}
+
+// handlePong pong 메시지 처리
+func (c *Client) handlePong(msg *Message) error {
+	c.LastPing = time.Now()
+	log.Printf("Pong received from client %s", c.ID)
+	return nil
+}
+
+// leaveRoom 현재 방에서 나가기
+func (c *Client) leaveRoom() {
+	if c.Room != "" {
+		log.Printf("Client %s leaving room %s", c.ID, c.Room)
+		c.Room = ""
+	}
+}
+
+// sendError 클라이언트에게 에러 메시지 전송
+func (c *Client) sendError(errorMsg string) error {
+	errorMessage := &Message{
+		Type:      MessageTypeError,
+		Content:   errorMsg,
+		Timestamp: time.Now(),
+	}
+
+	return c.SendMessage(errorMessage)
+}
+
+// SendMessage 클라이언트에게 메시지 전송
+func (c *Client) SendMessage(msg *Message) error {
+	messageBytes, err := msg.ToJSON()
+	if err != nil {
+		return err
+	}
+
+	select {
+	case c.send <- messageBytes:
+		return nil
+	default:
+		// 채널이 가득 찬 경우
+		return c.sendError("Message queue full")
+	}
+}
+
+// GetInfo 클라이언트 정보 반환
+func (c *Client) GetInfo() *ClientInfo {
+	return &ClientInfo{
+		ID:          c.ID,
+		Room:        c.Room,
+		UserID:      c.UserID,
+		SessionID:   c.SessionID,
+		ConnectedAt: c.ConnectedAt,
+		LastPing:    c.LastPing,
+	}
+}
+
+// Close 클라이언트 연결 종료
+func (c *Client) Close() {
+	c.IsActive = false
+	if c.send != nil {
+		close(c.send)
+	}
+	if c.conn != nil {
+		c.conn.Close()
+	}
+}
