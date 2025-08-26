@@ -49,7 +49,11 @@ func main() {
 		log.Printf("⚠️ Failed to initialize Gemma client: %v", err)
 		log.Println("⚠️ Starting without AI client - some features may not work")
 	} else {
-		defer gemmaClient.Close()
+		defer func() {
+			if err := gemmaClient.Close(); err != nil {
+				log.Printf("Failed to close Gemma client: %v", err)
+			}
+		}()
 	}
 
 	// Fiber 앱 초기화

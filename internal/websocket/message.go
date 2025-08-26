@@ -16,34 +16,34 @@ const (
 	MessageTypePong        MessageType = "pong"         // Heartbeat 응답
 
 	// 서버 → 클라이언트
-	MessageTypeRoomJoined  MessageType = "room_joined"   // 채팅방 입장 완료
-	MessageTypeNewMessage  MessageType = "new_message"   // 새 메시지 브로드캐스트
-	MessageTypeBlocked     MessageType = "message_blocked" // 메시지 차단 알림
-	MessageTypePing        MessageType = "ping"          // Heartbeat
-	MessageTypeError       MessageType = "error"         // 에러 메시지
-	MessageTypeUserCount   MessageType = "user_count"    // 사용자 수 업데이트
-	MessageTypeUserJoined  MessageType = "user_joined"   // 사용자 입장 알림
-	MessageTypeUserLeft    MessageType = "user_left"     // 사용자 퇴장 알림
+	MessageTypeRoomJoined MessageType = "room_joined"     // 채팅방 입장 완료
+	MessageTypeNewMessage MessageType = "new_message"     // 새 메시지 브로드캐스트
+	MessageTypeBlocked    MessageType = "message_blocked" // 메시지 차단 알림
+	MessageTypePing       MessageType = "ping"            // Heartbeat
+	MessageTypeError      MessageType = "error"           // 에러 메시지
+	MessageTypeUserCount  MessageType = "user_count"      // 사용자 수 업데이트
+	MessageTypeUserJoined MessageType = "user_joined"     // 사용자 입장 알림
+	MessageTypeUserLeft   MessageType = "user_left"       // 사용자 퇴장 알림
 )
 
 // Message WebSocket 메시지 구조
 type Message struct {
-	Type      MessageType            `json:"type"`                // 메시지 타입
-	Room      string                 `json:"room,omitempty"`      // 채팅방 이름
-	Content   string                 `json:"content,omitempty"`   // 메시지 내용
-	UserID    *uint                  `json:"user_id,omitempty"`   // 사용자 ID (로그인 사용자)
+	Type      MessageType            `json:"type"`                 // 메시지 타입
+	Room      string                 `json:"room,omitempty"`       // 채팅방 이름
+	Content   string                 `json:"content,omitempty"`    // 메시지 내용
+	UserID    *uint                  `json:"user_id,omitempty"`    // 사용자 ID (로그인 사용자)
 	SessionID *string                `json:"session_id,omitempty"` // 세션 ID (익명 사용자)
-	Nickname  string                 `json:"nickname,omitempty"`  // 닉네임
+	Nickname  string                 `json:"nickname,omitempty"`   // 닉네임
 	MessageID string                 `json:"message_id,omitempty"` // 메시지 ID (DB 저장 후)
-	Timestamp time.Time              `json:"timestamp"`           // 타임스탬프
-	Data      map[string]interface{} `json:"data,omitempty"`      // 추가 데이터
+	Timestamp time.Time              `json:"timestamp"`            // 타임스탬프
+	Data      map[string]interface{} `json:"data,omitempty"`       // 추가 데이터
 }
 
 // ChatMessageData 채팅 메시지 데이터
 type ChatMessageData struct {
 	ID        string    `json:"id"`
 	Content   string    `json:"content"`
-	Sender    string    `json:"sender"`    // 닉네임
+	Sender    string    `json:"sender"` // 닉네임
 	UserID    *uint     `json:"user_id,omitempty"`
 	SessionID *string   `json:"session_id,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
@@ -270,9 +270,9 @@ func (m *Message) IsClientMessage() bool {
 // IsServerMessage 서버에서 클라이언트로 보내는 메시지인지 확인
 func (m *Message) IsServerMessage() bool {
 	switch m.Type {
-	case MessageTypeRoomJoined, MessageTypeNewMessage, MessageTypeBlocked, 
-		 MessageTypePing, MessageTypeError, MessageTypeUserCount, 
-		 MessageTypeUserJoined, MessageTypeUserLeft:
+	case MessageTypeRoomJoined, MessageTypeNewMessage, MessageTypeBlocked,
+		MessageTypePing, MessageTypeError, MessageTypeUserCount,
+		MessageTypeUserJoined, MessageTypeUserLeft:
 		return true
 	default:
 		return false
@@ -290,7 +290,7 @@ func (m *Message) Validate() error {
 		if m.Room == "" {
 			return fmt.Errorf("room is required for join_room message")
 		}
-	
+
 	case MessageTypeChatMessage:
 		if m.Room == "" {
 			return fmt.Errorf("room is required for chat_message")
@@ -310,8 +310,11 @@ func (m *Message) Validate() error {
 func (m *Message) SanitizeContent() {
 	// 기본적인 HTML 태그 제거 (보안상 중요)
 	// 실제 프로덕션에서는 더 강력한 sanitization이 필요
-	if m.Content != "" {
-		// 여기에 HTML sanitization 로직 추가
-		// 예: html.EscapeString(m.Content)
+	if m.Content == "" {
+		return
 	}
+
+	// 여기에 HTML sanitization 로직 추가
+	// 예: m.Content = html.EscapeString(m.Content)
+	// 현재는 플레이스홀더이므로 아무 작업도 수행하지 않음
 }

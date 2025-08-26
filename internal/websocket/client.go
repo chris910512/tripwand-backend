@@ -79,7 +79,9 @@ func NewClient(conn *websocket.Conn, hub *Hub, clientID string) *Client {
 func (c *Client) ReadPump() {
 	defer func() {
 		c.hub.UnregisterClient(c)
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			log.Printf("Failed to close WebSocket connection in ReadPump: %v", err)
+		}
 	}()
 
 	c.conn.SetReadLimit(maxMessageSize)
@@ -119,7 +121,9 @@ func (c *Client) WritePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			log.Printf("Failed to close WebSocket connection in WritePump: %v", err)
+		}
 	}()
 
 	for {
@@ -387,6 +391,8 @@ func (c *Client) Close() {
 		close(c.send)
 	}
 	if c.conn != nil {
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			log.Printf("Failed to close WebSocket connection in Close: %v", err)
+		}
 	}
 }
