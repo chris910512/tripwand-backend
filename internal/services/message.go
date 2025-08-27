@@ -32,6 +32,9 @@ func (s *MessageService) SaveChatMessage(roomID uint, content string, userID *ui
 	log.Printf("[DEBUG-SAVE] - SessionID: %v", sessionID)
 	log.Printf("[DEBUG-SAVE] - Nickname: %s", nickname)
 
+	// UTC 시간 사용 (파티션 테이블 호환)
+	now := time.Now().UTC()
+
 	chatMessage := &models.ChatMessage{
 		// ID는 auto increment이므로 설정하지 않음
 		RoomID:      roomID,
@@ -40,15 +43,30 @@ func (s *MessageService) SaveChatMessage(roomID uint, content string, userID *ui
 		Content:     content,
 		Sender:      nickname,
 		MessageType: models.MessageTypeText,
-		CreatedAt:   time.Now(),
+		CreatedAt:   now,
 	}
 
 	log.Printf("[DEBUG-SAVE] Created ChatMessage struct: %+v", chatMessage)
-	log.Printf("[DEBUG-SAVE] Attempting DB Create operation...")
+	log.Printf("[DEBUG-SAVE] Using UTC time: %s", now.Format("2006-01-02 15:04:05 MST"))
 
+	// 필요한 파티션이 존재하는지 확인하고 없으면 생성
+	if err := s.ensurePartitionExists(now); err != nil {
+		log.Printf("[DEBUG-SAVE] WARNING: Failed to ensure partition exists: %v", err)
+		// 파티션 생성 실패해도 계속 진행 (기존 파티션이 있을 수 있음)
+	}
+
+	log.Printf("[DEBUG-SAVE] Attempting DB Create operation...")
 	result := s.db.Create(chatMessage)
 	if result.Error != nil {
 		log.Printf("[DEBUG-SAVE] ERROR: DB Create failed: %v", result.Error)
+		log.Printf("[DEBUG-SAVE] ERROR Details - SQL State: %T", result.Error)
+
+		// 파티션 관련 에러일 경우 추가 정보 출력
+		if fmt.Sprintf("%v", result.Error) != "" {
+			log.Printf("[DEBUG-SAVE] Checking if partition exists for date: %s", now.Format("2006-01-02"))
+			s.checkPartitionStatus(now)
+		}
+
 		return nil, fmt.Errorf("failed to save chat message: %w", result.Error)
 	}
 
@@ -57,6 +75,67 @@ func (s *MessageService) SaveChatMessage(roomID uint, content string, userID *ui
 	log.Printf("[DEBUG-SAVE] - Final message ID: %d", chatMessage.ID)
 	log.Printf("Saved message %d from %s in room %d", chatMessage.ID, nickname, roomID)
 	return chatMessage, nil
+}
+
+// ensurePartitionExists 필요한 파티션이 존재하는지 확인하고 없으면 생성
+func (s *MessageService) ensurePartitionExists(date time.Time) error {
+	dateStr := date.Format("2006_01_02")
+	tableName := fmt.Sprintf("chat_messages_%s", dateStr)
+
+	// 파티션 테이블 존재 확인
+	var exists bool
+	checkSQL := `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = ? AND table_schema = 'public')`
+	if err := s.db.Raw(checkSQL, tableName).Scan(&exists).Error; err != nil {
+		return fmt.Errorf("failed to check partition existence: %w", err)
+	}
+
+	if exists {
+		log.Printf("[DEBUG-PARTITION] Partition %s already exists", tableName)
+		return nil
+	}
+
+	// 파티션 생성
+	log.Printf("[DEBUG-PARTITION] Creating missing partition: %s", tableName)
+	startDate := date.Format("2006-01-02")
+	endDate := date.AddDate(0, 0, 1).Format("2006-01-02")
+
+	partitionSQL := fmt.Sprintf(`
+	CREATE TABLE IF NOT EXISTS %s PARTITION OF chat_messages
+	FOR VALUES FROM ('%s 00:00:00+00') TO ('%s 00:00:00+00');`,
+		tableName, startDate, endDate)
+
+	if err := s.db.Exec(partitionSQL).Error; err != nil {
+		return fmt.Errorf("failed to create partition %s: %w", tableName, err)
+	}
+
+	log.Printf("[DEBUG-PARTITION] Successfully created partition: %s", tableName)
+	return nil
+}
+
+// checkPartitionStatus 파티션 상태 확인 (디버깅용)
+func (s *MessageService) checkPartitionStatus(date time.Time) {
+	log.Printf("[DEBUG-PARTITION] === Partition Status Check ===")
+
+	// 현재 서버 시간 및 시간대 확인
+	var serverTime, utcTime, timezone string
+	err := s.db.Raw("SELECT current_timestamp, timezone('UTC', current_timestamp), current_setting('timezone')").
+		Row().Scan(&serverTime, &utcTime, &timezone)
+	if err != nil {
+		return
+	}
+	log.Printf("[DEBUG-PARTITION] Server time: %s, UTC: %s, Timezone: %s", serverTime, utcTime, timezone)
+
+	// 파티션 테이블 목록
+	var partitions []string
+	s.db.Raw(`SELECT tablename FROM pg_tables WHERE tablename LIKE 'chat_messages_%' ORDER BY tablename`).
+		Pluck("tablename", &partitions)
+	log.Printf("[DEBUG-PARTITION] Existing partitions: %v", partitions)
+
+	// 메인 테이블 존재 확인
+	var mainTableExists bool
+	s.db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'chat_messages' AND table_schema = 'public')`).
+		Scan(&mainTableExists)
+	log.Printf("[DEBUG-PARTITION] Main table exists: %v", mainTableExists)
 }
 
 // GetRoomMessages 채팅방 메시지 목록 조회 (페이징)
