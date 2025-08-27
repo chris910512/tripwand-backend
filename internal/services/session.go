@@ -29,7 +29,7 @@ func NewSessionService() *SessionService {
 // CreateOrRecoverSession 세션 생성 또는 복구
 func (s *SessionService) CreateOrRecoverSession(browserFingerprint, localStorageKey string) (*models.AnonymousSession, error) {
 	now := time.Now()
-	
+
 	// 1. localStorage 키로 기존 세션 찾기 시도
 	if localStorageKey != "" {
 		session, err := s.findSessionByLocalStorageKey(localStorageKey)
@@ -38,7 +38,7 @@ func (s *SessionService) CreateOrRecoverSession(browserFingerprint, localStorage
 			return s.refreshSession(session)
 		}
 	}
-	
+
 	// 2. 브라우저 지문으로 기존 세션 찾기 시도
 	if browserFingerprint != "" {
 		session, err := s.findSessionByFingerprint(browserFingerprint)
@@ -51,7 +51,7 @@ func (s *SessionService) CreateOrRecoverSession(browserFingerprint, localStorage
 			return s.refreshSession(session)
 		}
 	}
-	
+
 	// 3. 새로운 세션 생성
 	return s.createNewSession(browserFingerprint, localStorageKey)
 }
@@ -63,7 +63,7 @@ func (s *SessionService) GetSession(sessionID string) (*models.AnonymousSession,
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	
+
 	return &session, nil
 }
 
@@ -74,7 +74,7 @@ func (s *SessionService) RefreshSession(sessionID string) (*models.AnonymousSess
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	
+
 	return s.refreshSession(&session)
 }
 
@@ -110,12 +110,12 @@ func (s *SessionService) findSessionByFingerprint(fingerprint string) (*models.A
 func (s *SessionService) createNewSession(browserFingerprint, localStorageKey string) (*models.AnonymousSession, error) {
 	sessionID := uuid.New().String()
 	nickname := s.generateNickname(sessionID)
-	
+
 	// localStorage 키가 없으면 세션 ID 기반으로 생성
 	if localStorageKey == "" {
 		localStorageKey = s.generateLocalStorageKey(sessionID)
 	}
-	
+
 	session := &models.AnonymousSession{
 		SessionID:          sessionID,
 		Nickname:           nickname,
@@ -124,12 +124,12 @@ func (s *SessionService) createNewSession(browserFingerprint, localStorageKey st
 		CreatedAt:          time.Now(),
 		ExpiresAt:          time.Now().Add(7 * 24 * time.Hour), // 7일 후 만료
 	}
-	
+
 	result := s.db.Create(session)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	
+
 	return session, nil
 }
 
@@ -137,12 +137,12 @@ func (s *SessionService) createNewSession(browserFingerprint, localStorageKey st
 func (s *SessionService) refreshSession(session *models.AnonymousSession) (*models.AnonymousSession, error) {
 	// 만료 시간을 현재 시간 + 7일로 연장
 	session.ExpiresAt = time.Now().Add(7 * 24 * time.Hour)
-	
+
 	result := s.db.Save(session)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	
+
 	return session, nil
 }
 
@@ -151,7 +151,7 @@ func (s *SessionService) generateNickname(sessionID string) string {
 	// 세션 ID에서 8자리 추출 (영숫자만)
 	hash := sha256.Sum256([]byte(sessionID))
 	hashStr := hex.EncodeToString(hash[:])
-	
+
 	// 영숫자 조합으로 8자리 생성
 	var nickname []rune
 	for _, char := range hashStr {
@@ -162,8 +162,8 @@ func (s *SessionService) generateNickname(sessionID string) string {
 			nickname = append(nickname, char)
 		}
 	}
-	
-	return fmt.Sprintf("익명_%s", string(nickname))
+
+	return fmt.Sprintf("%s", string(nickname))
 }
 
 // generateLocalStorageKey localStorage 키 생성
@@ -174,42 +174,42 @@ func (s *SessionService) generateLocalStorageKey(sessionID string) string {
 		// 랜덤 바이트 생성 실패 시 시간 기반 대체
 		randomBytes = []byte(fmt.Sprintf("%d", time.Now().UnixNano()))
 	}
-	
+
 	combined := append([]byte(sessionID), randomBytes...)
 	hash := sha256.Sum256(combined)
-	
+
 	return hex.EncodeToString(hash[:16]) // 32자리 헥스 문자열
 }
 
 // SessionStats 세션 통계 정보
 type SessionStats struct {
-	TotalSessions  int64 `json:"total_sessions"`
-	ActiveSessions int64 `json:"active_sessions"`
+	TotalSessions   int64 `json:"total_sessions"`
+	ActiveSessions  int64 `json:"active_sessions"`
 	ExpiredSessions int64 `json:"expired_sessions"`
 }
 
 // GetSessionStats 세션 통계 조회
 func (s *SessionService) GetSessionStats() (*SessionStats, error) {
 	now := time.Now()
-	
+
 	var total, active, expired int64
-	
+
 	// 전체 세션 수
 	if err := s.db.Model(&models.AnonymousSession{}).Count(&total).Error; err != nil {
 		return nil, err
 	}
-	
+
 	// 활성 세션 수
 	if err := s.db.Model(&models.AnonymousSession{}).Where("expires_at > ?", now).Count(&active).Error; err != nil {
 		return nil, err
 	}
-	
+
 	// 만료된 세션 수
 	expired = total - active
-	
+
 	return &SessionStats{
-		TotalSessions:  total,
-		ActiveSessions: active,
+		TotalSessions:   total,
+		ActiveSessions:  active,
 		ExpiredSessions: expired,
 	}, nil
 }
