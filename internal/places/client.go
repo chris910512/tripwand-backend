@@ -105,7 +105,9 @@ func (c *Client) SearchPlaces(req PlacesRequest) (*PlacesResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request to Google Places API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
@@ -115,7 +117,7 @@ func (c *Client) SearchPlaces(req PlacesRequest) (*PlacesResponse, error) {
 
 	// Check HTTP status
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Google Places API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("google Places API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse new API response format

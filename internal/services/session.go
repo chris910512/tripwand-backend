@@ -163,7 +163,7 @@ func (s *SessionService) generateNickname(sessionID string) string {
 		}
 	}
 
-	return fmt.Sprintf("%s", string(nickname))
+	return string(nickname)
 }
 
 // generateLocalStorageKey localStorage 키 생성
