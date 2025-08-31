@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -58,7 +59,7 @@ type Text struct {
 
 func NewClient() *Client {
 	return &Client{
-		apiKey: os.Getenv("GOOGLE_PLACES_API_KEY"),
+		apiKey: strings.TrimSpace(os.Getenv("GOOGLE_PLACES_API_KEY")),
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
