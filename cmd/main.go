@@ -95,6 +95,9 @@ func main() {
 	// 여행 관련 라우트 설정
 	routes.SetupTravelRoutes(api, gemmaClient)
 
+	// Places API 라우트 설정
+	routes.SetupPlacesRoutes(api)
+
 	// 채팅 관련 라우트 설정
 	routes.SetupChatRoutes(app)
 
@@ -108,6 +111,7 @@ func main() {
 	log.Printf("   Health Check: http://localhost:%s/health", port)
 	log.Printf("   Travel API: http://localhost:%s/api/v1/travel/generate", port)
 	log.Printf("   Plans API: http://localhost:%s/api/v1/travel/plans", port)
+	log.Printf("   Places API: http://localhost:%s/api/v1/places/search", port)
 	log.Printf("   Chat WebSocket: ws://localhost:%s/ws/chat", port)
 	log.Printf("   Chat Rooms: http://localhost:%s/api/v1/chat/rooms", port)
 	log.Printf("   Chat Stats: http://localhost:%s/api/v1/chat/stats", port)
